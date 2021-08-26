@@ -1,0 +1,89 @@
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.std_logic_unsigned.all;
+
+entity VGA is
+port(
+	R,G,B:		out	std_logic_vector (3 downto 0);
+	Hsync:	out	std_logic;
+	Vsync:	out	std_logic;
+	clk,reset:		in	std_logic);
+end VGA;
+
+architecture behavioral of VGA is
+
+    constant TS_H : integer := 799; -- 799 nombre de pixels par ligne
+    constant TDISP_H : integer := 640;  --  640   Horizontal Display (640)
+	constant TFP_H : integer := 19;         --   19   Right border (front porch)
+	constant TPW_H : integer := 96;       --   96   Sync pulse (Retrace)
+	constant TBP_H : integer := 48;        --   48   Left boarder (back porch)
+	
+	constant TS_V: integer := 520; -- 520 nombre de pixels par colonne
+	constant TDISP_V : integer := 480;   --  480   Vertical Display (480)
+	constant TFP_V : integer := 4;       	 --   4   Right border (front porch)
+	constant TPW_V : integer := 2;				 --    2   Sync pulse (refresh)
+	constant TBP_V : integer := 29;       --   29   Left boarder (back porch)
+    
+    signal clk25_s : std_logic := '0';
+    signal cpt : integer range 0 to 3;
+    
+    signal hcord : integer range 0 to TS_H;
+    signal vcord : integer range 0 to TS_V;
+    
+    signal visible : std_logic;
+    
+begin
+
+--====================--
+-- DIVISEUR D'HORLOGE --
+--====================--
+    process(clk,reset)
+    begin
+        if reset = '1' then clk25_s <= '0'; cpt <= 0;
+        elsif rising_edge(clk) then
+            if  cpt = 3 then clk25_s <= '1'; cpt <= 0;
+            else cpt <= cpt + 1; clk25_s <= '0';
+            end if;
+        end if;
+    end process;
+
+--===================--
+-- COMPTEUR DE PIXEL --
+--===================--
+    process(clk25_s,reset)
+    begin
+    if reset = '1' then hcord <= 0; vcord <= 0;
+    elsif rising_edge(clk25_s) then
+        --On passe au pixel horizontal suivant s'il n'est pas le dernier de la ligne
+        if hcord < TS_H then hcord <= hcord+1;
+        --sinon on vérifie qu'on n'est pas sur la dernière ligne
+        elsif vcord < TS_V then 
+        --et on passe à la ligne suivante
+        vcord <= vcord+1;
+        --et au premier pixel horizontal de la ligne
+        hcord <= 0;
+        --sinon on passe au pixel(0;0) de l'écran 
+        else vcord <= 0; hcord <= 0;
+        end if;       
+    end if;
+    end process;
+    
+--===========================================--
+-- GENERATION DES SYGNAUX DE SYNCHRONISATION --
+--===========================================--
+    Hsync <= '0' when (hcord > TDISP_H + TFP_H  and  hcord <=TDISP_H + TFP_H + TPW_H) else '1';
+    VSync <= '0' when  (vcord > TDISP_V+TFP_V and vcord <= TDISP_V+TFP_V+TPW_V) else '1';
+
+--=============================--
+-- GENERATION DU SIGNAL DE VISIBLE--
+--=============================--    
+    visible <= '1' when (hcord <= TDISP_H and vcord <= TDISP_V) else '0';
+
+--========================--
+-- AFFICHAGE DES COULEURS --
+--========================--
+ R <= "1111" when visible = '1' else "0000";
+ G <= "0000" when visible = '1' else "1111";
+ B <= "0000" when visible = '1' else "1111";
+     
+end behavioral;
